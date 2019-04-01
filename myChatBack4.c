@@ -5,7 +5,7 @@
 
 #define MAX_USERNAME 32
 #define MAX_BUFFER 15360
-#define MAX_MESSAGE_LENGTH 185
+#define MAX_MESSAGE_LENGTH 1024
 #define MAX_OUTLINE 15
 
 const int output_x = 50;
@@ -14,11 +14,16 @@ const int input_x =  50;//output_x
 const int input_y = 6;
 const int userlist_x = 30;
 const int userlist_y = 24;//output_y + input_y;
+WINDOW *output_border;
+WINDOW *userlist_border;
+WINDOW *input_border;  
+WINDOW *output;
+WINDOW *userlist;
+WINDOW *input;  
 
 typedef struct message{
   char *str;
   char *from;
-  int length;
   struct message* link;
 }message;
 
@@ -33,15 +38,14 @@ void initQueue (messageQueue* q){
   q->size = 0;
 }
 
-void enqueue(messageQueue* q, char* _from, char* _str, int length){
+void enqueue(messageQueue* q, char* _from, char* _str){
   q->size++;
   message* temp = (message *)malloc(sizeof(message));
   temp->from = (char *)malloc(sizeof(char) * MAX_USERNAME);
   temp->str = (char *)malloc(sizeof(char) * MAX_MESSAGE_LENGTH);
   temp->link = NULL;
-  temp->length = length;
   strcpy(temp->from,_from);
-  strncpy(temp->str,_str,length);
+  strcpy(temp->str,_str);
 
   if(q->rear == NULL) q->front = q->rear = temp;
   else{
@@ -54,25 +58,24 @@ void dequeue(messageQueue* q){
   q->size--;
   message* temp = q->front;
   q->front = q->front->link;
-
+  /*
   free(temp->from);
   free(temp->str);
   free(temp);
+*/
  }
 
 void printMessages(WINDOW* output, messageQueue* q){
   char *totalStr = (char *)malloc(MAX_BUFFER);
   message* temp = q->front;
   
-  int t = 0;
-
   // queue message -> print  
   while(temp){
     char *curStr = (char *)malloc(MAX_MESSAGE_LENGTH + MAX_USERNAME + 6);
-    strcpy(curStr," ");
+    strcpy(curStr, " ");
     strcat(curStr, temp->from);
     strcat(curStr," : ");
-    strncat(curStr,temp->str,temp->length);
+    strcat(curStr,temp->str);
     strcat(curStr,"\0");
     size_t totallen = strlen(totalStr);
     size_t curlen = strlen(curStr);
@@ -114,12 +117,12 @@ int main(){
   username = getenv("USER");
 
   // make window
-  WINDOW *output_border   = newwin(output_y-1, output_x, 0, 0);
-  WINDOW *userlist_border = newwin(userlist_y, userlist_x, 0, output_x);
-  WINDOW *input_border    = newwin(input_y, input_x, output_y, 0);   
-  WINDOW *output          = newwin(output_y-3, output_x-2, 1, 1);
-  WINDOW *userlist        = newwin(userlist_y-2, userlist_x-2, 1, output_x+1);
-  WINDOW *input           = newwin(input_y-2, input_x-2, output_y+1, 1);  
+  output_border   = newwin(output_y-1, output_x, 0, 0);
+  userlist_border = newwin(userlist_y, userlist_x, 0, output_x);
+  input_border    = newwin(input_y, input_x, output_y, 0);   
+  output          = newwin(output_y-3, output_x-2, 1, 1);
+  userlist        = newwin(userlist_y-2, userlist_x-2, 1, output_x+1);
+  input           = newwin(input_y-2, input_x-2, output_y+1, 1);  
   
   scrollok(output,true);
   scrollok(input,true);
@@ -134,35 +137,49 @@ int main(){
   wrefresh(output_border);
   wrefresh(userlist_border);
   wrefresh(input_border);
-  printWindow(username, input,output,userlist);
 
+  printWindow(username, input,output,userlist);
+  mvwprintw(output, 0, 0, "welcome\n");
+  
+  wrefresh(output);
+  wrefresh(userlist);
+  wrefresh(input);
   char inputline[MAX_MESSAGE_LENGTH] ="";
-  int  index = 0;
   char outputline[MAX_BUFFER] = " ";
   char c;
   while(c = wgetch(input)){ 
     if(c == 27) break;  // esc
     else if(c == 10){ // enter
-      if (index <= 0) continue;
-      if(mqueue->size > MAX_OUTLINE) dequeue(mqueue);
-      inputline[index++] = '\0';
-      enqueue(mqueue,username,inputline,index);
+      size_t len = strlen(inputline);
+      if (len <= 0) continue;
+      if(mqueue->size > MAX_OUTLINE){
+        dequeue(mqueue);
+        wclear(output);
+      }
+      enqueue(mqueue,username,inputline);
       printMessages(output,mqueue);
       
       //clear input line
-      memset(inputline,'\0',MAX_MESSAGE_LENGTH);
-      index = 0;
+      memset(inputline,' ',300);
+      inputline[0] = '\0';
       wclear(input);
     }else if(c == 127){ // backspace
-      if (index <= 0) continue;
-      inputline[index-1] = '\0';
-      index--;
+      size_t len = strlen(inputline);
+      if (len <= 0) continue;
+      char *newline = (char *)malloc(len-1);
+      strcpy(newline,inputline);
+      newline[len-1] = '\0';
+      strcpy(inputline,newline);
       wclear(input);
+      free(newline);
     }else{
-      if (index >= MAX_MESSAGE_LENGTH)continue;
-      inputline[index] = c;
-      inputline[index+1] = '\0';
-      index++;
+      size_t len = strlen(inputline);
+      char *newline = (char*)malloc(len+1);
+      strcpy(newline,inputline);
+      newline[len] = c;
+      newline[len+1] = '\0';
+      strcpy(inputline,newline);
+      free(newline);
     } 
     printWindow(username, input,output,userlist);
     wprintw(input,inputline);
