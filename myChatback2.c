@@ -1,12 +1,12 @@
 #include <ncurses.h>
 #include <unistd.h>
-#include <stdlib.h> // getenv, malloc, free
+#include <stdlib.h>
 #include <string.h>
 
 #define MAX_USERNAME 32
 #define MAX_BUFFER 15360
 #define MAX_MESSAGE_LENGTH 1024
-#define MAX_OUTLINE 15
+#define MAX_OUTLINE 16
 
 typedef struct message{
   char *str;
@@ -50,9 +50,9 @@ void dequeue(messageQueue* q){
   free(temp);
 }
 
-void printMessages(WINDOW* output, messageQueue* q){
+void printMessages(WINDOW* output, messageQueue* mQueue){
   char *totalStr = (char *)malloc(MAX_BUFFER);
-  message* temp = q->front;
+  message* temp = mQueue->front;
   
   // queue message -> print  
   while(temp){
@@ -90,14 +90,13 @@ void printWindow(char* user,WINDOW* input,WINDOW* output, WINDOW* userlist){
     wattroff(userlist,COLOR_PAIR(1));
     
     int i;
-    mvwprintw(output, 0, 0, "*");
-    mvwprintw(input, 1, 0, "*");
+    mvwprintw(input, 0, 0, "*");
     for (i = 1; i < 50; i++){
-      mvwprintw(input, 1, i, "-");
+      mvwprintw(input, 0, i, "-");
       mvwprintw(output, 0, i, "-");
     }
-    mvwprintw(input, 1, 49, "*");
-    mvwprintw(input, 2, 1, "input:");
+    mvwprintw(input, 0, 50, "*");
+    mvwprintw(input, 1, 1, "input:");
    
     wrefresh(output);
     wrefresh(userlist);
@@ -108,7 +107,7 @@ int main(){
   int output_x = 50;
   int output_y = 18;
   int input_x = output_x;
-  int input_y = 6;
+  int input_y = 5;
   int userlist_x = 30;
   int userlist_y = output_y + input_y;
   char *username;
@@ -130,7 +129,7 @@ int main(){
   scrollok(userlist,true);
 
   start_color();
-  init_pair(1,COLOR_BLACK,COLOR_WHITE);
+  init_pair(1,COLOR_RED,COLOR_WHITE);
 
   printWindow(username, input,output,userlist);
   char inputline[MAX_MESSAGE_LENGTH] ="";
@@ -141,10 +140,7 @@ int main(){
     else if(c == 10){ // enter
       size_t len = strlen(inputline);
       if (len <= 0) continue;
-      if(mqueue->size > MAX_OUTLINE){
-        dequeue(mqueue);
-        wclear(output);
-      }
+      if(mqueue->size > MAX_OUTLINE) dequeue(mqueue);
       enqueue(mqueue,username,inputline);
       printMessages(output,mqueue);
       
