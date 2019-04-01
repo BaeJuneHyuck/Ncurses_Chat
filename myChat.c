@@ -62,6 +62,7 @@ void dequeue(messageQueue* q){
 
 void printMessages(WINDOW* output, messageQueue* q){
   char *totalStr = (char *)malloc(MAX_BUFFER);
+  strcpy(totalStr,"\0");
   message* temp = q->front;
   
   int t = 0;
@@ -69,7 +70,9 @@ void printMessages(WINDOW* output, messageQueue* q){
   // queue message -> print  
   while(temp){
     char *curStr = (char *)malloc(MAX_MESSAGE_LENGTH + MAX_USERNAME + 6);
-    strcpy(curStr," ");
+    strcpy(curStr," "); // set string empty
+    
+    // fill current string with username, message
     strcat(curStr, temp->from);
     strcat(curStr," : ");
     strncat(curStr,temp->str,temp->length);
@@ -114,10 +117,10 @@ int main(){
   username = getenv("USER");
 
   // make window
-  WINDOW *output_border   = newwin(output_y-1, output_x, 0, 0);
+  WINDOW *output_border   = newwin(output_y, output_x, 0, 0);
   WINDOW *userlist_border = newwin(userlist_y, userlist_x, 0, output_x);
   WINDOW *input_border    = newwin(input_y, input_x, output_y, 0);   
-  WINDOW *output          = newwin(output_y-3, output_x-2, 1, 1);
+  WINDOW *output          = newwin(output_y-2, output_x-2, 1, 1);
   WINDOW *userlist        = newwin(userlist_y-2, userlist_x-2, 1, output_x+1);
   WINDOW *input           = newwin(input_y-2, input_x-2, output_y+1, 1);  
   
