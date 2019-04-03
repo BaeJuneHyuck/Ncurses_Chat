@@ -3,8 +3,10 @@
 #include <stdlib.h> // getenv, malloc, free
 #include <string.h>
 
+#include <sys/shm.h>
+
 #define MAX_USERNAME 32
-#define MAX_BUFFER 15360
+#define MAX_BUFFER 2048
 #define MAX_MESSAGE_LENGTH 185
 #define MAX_OUTLINE 15
 
@@ -141,7 +143,7 @@ int main(){
 
   char inputline[MAX_MESSAGE_LENGTH] ="";
   int  index = 0;
-  char outputline[MAX_BUFFER] = " ";
+  char outputline[MAX_BUFFER] = "";
   char c;
   while(c = wgetch(input)){ 
     if(c == 27) break;  // esc
