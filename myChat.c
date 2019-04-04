@@ -2,7 +2,7 @@
 #include <unistd.h>
 #include <stdlib.h> // getenv, malloc, free
 #include <string.h> //strcpy, strncpy, strcat
-
+#include <pthread.h>
 #include <sys/shm.h>
 
 #define MAX_USERNAME 32
@@ -18,6 +18,8 @@ const int userlist_x = 30;
 const int userlist_y = 24;
 
 typedef struct message{
+  //char str[MAX_MESSAGE_LENGTH];
+  //char from[MAX_USERNAME];
   char *str;
   char *from;
   int length;
@@ -28,11 +30,13 @@ typedef struct messageQueue{
   message *front;
   message *rear;
   int size;
+  int usercount;
 }messageQueue;
 
 void initQueue (messageQueue* q){
   q->front = q->rear = NULL;
   q->size = 0;
+  q->usercount = 1;
 }
 
 // add a message to message queue
@@ -62,10 +66,10 @@ void dequeue(messageQueue* q){
   message* temp = q->front;
   q->front = q->front->link;
 
-  free(temp->from);
-  free(temp->str);
+  //free(temp->from);
+  //free(temp->str);
   free(temp);
- }
+}
 
 // print all Messages in messagequeue
 // get message instance with temp->link
@@ -117,17 +121,44 @@ void printWindow(char* user,WINDOW* input,WINDOW* output, WINDOW* userlist){
     wrefresh(input);
 }
 
+
 int main(){
   // mqueue has all messages from user
-  messageQueue* mqueue = (messageQueue *)malloc(sizeof(messageQueue));
+ 
+  //messageQueue* mqueue = (messageQueue *)malloc(sizeof(messageQueue));
   
+  int shmid;
+  pid_t server_pid;
+  messageQueue* mqueue;
+  
+  shmid = shmget(201424465, sizeof(messageQueue), IPC_EXCL| IPC_CREAT | 0660);
+  if(shmid == -1){ // shm already exists! 
+    shmid = shmget(201424465, sizeof(messageQueue), 0660);
+    mqueue =(messageQueue*) shmat(shmid,NULL,0);
+    mqueue->usercount++;
+  }
+  else{
+    mqueue = shmat(shmid,NULL,0);
+    initQueue(mqueue);
+    
+    server_pid == fork();
+    if(server_pid == 0){
+      //child == server
+      while(mqueue->usercount != 0);
+      shmctl(shmid, IPC_RMID, NULL);
+      exit(0);
+    }else{
+      // parent, =client
+    }
+  }  
+
   char *username;
   username = getenv("USER");
 
-  initQueue(mqueue);
   initscr();
   noecho();
   cbreak();
+  keypad(stdscr, true);
  
   // make window
   WINDOW *output_border   = newwin(output_y, output_x, 0, 0);
@@ -158,12 +189,17 @@ int main(){
   int  index = 0;
   char outputline[MAX_BUFFER] = "";
   char c;
+
   while(c = wgetch(input)){ 
-    if(c == 27) break;  // get 'esc' -> exit
-    else if(c == 10){ 
+    //if(c == 27) continue;  // ignore special function keys like esc,f1,f2, etc
+    if(c == 10){ 
       // enter, make a message from inputline and enqueue
       // if queue is full dequeue the oldest one
       if (index <= 0) continue;
+      if(strcmp(inputline, "./quit") == 0){
+	mqueue->usercount--;
+	break;
+      }
       if(mqueue->size > MAX_OUTLINE) dequeue(mqueue);
       inputline[index++] = '\0';
       enqueue(mqueue,username,inputline,index);
@@ -189,8 +225,10 @@ int main(){
     printWindow(username, input,output,userlist);
     wprintw(input,inputline);
   }
-  free(mqueue);
+  //free(mqueue);
 
+  //shmctl(shmid, IPC_RMID, NULL);
+  
   delwin(output);
   delwin(input);
   delwin(userlist);
