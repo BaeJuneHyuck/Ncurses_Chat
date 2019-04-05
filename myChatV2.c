@@ -5,11 +5,10 @@
 #include <pthread.h>
 #include <sys/shm.h>
 
-#define MAX_USER 10
 #define MAX_USERNAME 32
 #define MAX_BUFFER 2048
-#define MAX_MESSAGE 20
 #define MAX_MESSAGE_LENGTH 185
+#define MAX_MESSAGE 20
 #define SHARED_MEMORY 4668
 
 // one messageQueue = 2* message + 2* int = 2*message + 8
@@ -32,9 +31,7 @@ typedef struct message{
 }message;
 
 typedef struct messageQueue{ // circular queue
-  int usercount; // number of user in chat room
-  int userkey;   // unique number for each user, never decrease
-  char userlist[MAX_USER][MAX_USERNAME];
+  int usercount;
   message list[MAX_MESSAGE];
   int size;
   int rear;
@@ -45,7 +42,6 @@ void initQueue (messageQueue* q){
   q->front = q->rear = -1;
   q->size = MAX_MESSAGE;
   q->usercount = 1;
-  q->userKey = 1;
 }
 
 // add a message to message queue
@@ -63,7 +59,11 @@ void enqueue(messageQueue* q, char* _from, char* _str, int length){
   else{
     q->rear++;
   }
-  
+
+  //message* temp = (message *)malloc(sizeof(message));
+  //message* temp = q->list[q->rear];
+  //temp->from = (char *)malloc(sizeof(char) * MAX_USERNAME);
+  //temp->str = (char *)malloc(sizeof(char) * MAX_MESSAGE_LENGTH);
   message *temp = &q->list[q->rear];
   temp->length = length;
   strcpy(temp->from,_from);
@@ -134,7 +134,6 @@ void printWindow(char* user,WINDOW* input,WINDOW* output, WINDOW* userlist){
 int main(int argc, char*argv[]){
   // mqueue has all messages from user
   
-  int myKey;
   size_t shmid;
   pid_t server_pid;
   messageQueue* mqueue;
@@ -151,7 +150,6 @@ int main(int argc, char*argv[]){
     shmid = shmget(201424465, SHARED_MEMORY, 0777);
     mqueue =(messageQueue*) shmat(shmid,NULL,0);
     mqueue->usercount++;
-    mqueue->userKey++;
   }
   else{
     mqueue = shmat(shmid,NULL,0);
@@ -235,6 +233,7 @@ int main(int argc, char*argv[]){
     printWindow(username, input,output,userlist);
     wprintw(input,inputline);
   }
+  //shmdt(shmid);
   delwin(output);
   delwin(input);
   delwin(userlist);
