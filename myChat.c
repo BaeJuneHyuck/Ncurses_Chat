@@ -10,13 +10,7 @@
 #define MAX_BUFFER 2048
 #define MAX_MESSAGE 20
 #define MAX_MESSAGE_LENGTH 185
-#define SHARED_MEMORY 4668
-
-// one messageQueue = 2* message + 2* int = 2*message + 8
-// one messag       = char*[185 + 32] + int + pointer to next
-//                  = 217 + 8 + 8  =233
-// shm need one message queue + 20 outline(message instance)
-// (8 + 20*233 = 4668)??
+#define SHARED_MEMORY 5120
 
 const int output_x = 50;
 const int output_y = 18;
@@ -24,6 +18,11 @@ const int input_x =  50;
 const int input_y = 6;
 const int userlist_x = 30;
 const int userlist_y = 24;
+
+typedef struct userTable{
+  char name[MAX_USER][MAX_USERNAME];
+  bool using[MAX_USER];
+}userTable;
 
 typedef struct message{
   char str[MAX_MESSAGE_LENGTH];
@@ -34,7 +33,7 @@ typedef struct message{
 typedef struct messageQueue{ // circular queue
   int usercount; // number of user in chat room
   int userkey;   // unique number for each user, never decrease
-  char userlist[MAX_USER][MAX_USERNAME];
+  userTable usertable;
   message list[MAX_MESSAGE];
   int size;
   int rear;
@@ -44,8 +43,19 @@ typedef struct messageQueue{ // circular queue
 void initQueue (messageQueue* q){
   q->front = q->rear = -1;
   q->size = MAX_MESSAGE;
-  q->usercount = 1;
-  q->userKey = 1;
+  q->usercount = 0;
+  
+  for(int i = 0 ;i<MAX_USER;i++){
+    q->usertable.using[i] = false;
+    strcpy(q->usertable.name[i], "");
+  }
+}
+
+bool adduser(messageQueue* q, char*name){
+  if(q->usercount > MAX_USER) return false;
+  q->usertable.using[q->usercount] = true;
+  strcpy(q->usertable.name[q->usercount], name);
+  return true;
 }
 
 // add a message to message queue
@@ -79,8 +89,8 @@ void makeMessage(char* totalStr, message* msg){
     strcat(curStr," : ");
     strncat(curStr,msg->str,msg->length);
     strcat(curStr,"\0");
-    size_t totallen = strlen(totalStr);
-    size_t curlen = strlen(curStr);
+    int totallen = strlen(totalStr);
+    int curlen = strlen(curStr);
     
     // concatenate current string(temp) to total string
     strcat(totalStr,curStr);
@@ -117,55 +127,87 @@ void printMessages(WINDOW* output, messageQueue* q){
   free(totalStr); // don't forget free
 }
 
-void printWindow(char* user,WINDOW* input,WINDOW* output, WINDOW* userlist){
-    wattron(userlist,A_BOLD);
-    wattron(userlist,COLOR_PAIR(1));
-    mvwprintw(userlist, 0,0, user);
-    wattroff(userlist,A_BOLD);
-    wattroff(userlist,COLOR_PAIR(1));
-    
-    mvwprintw(input, 0, 0, "input:");
-    wrefresh(output); 
-    wrefresh(userlist);
-    wrefresh(input);
+void printWindow(WINDOW* input,WINDOW* output){ 
+  mvwprintw(input, 0, 0, "input:");
+  wrefresh(output); 
+  wrefresh(input);
 }
 
+void printUser(WINDOW* userlist, userTable* table){
+  wattron(userlist,A_BOLD);
+  wattron(userlist,COLOR_PAIR(1));
+ 
+  // get users from table
+  // if (using) it means there are user here 
+  char *totalStr = (char *)malloc(MAX_BUFFER);
+  strcpy(totalStr,"\0"); // init str '\0'
+  for(int i = 0 ; i < MAX_USER ; i++){
+    if(table->using[i]){
+      strcat(totalStr," ");
+      strcat(totalStr, table->name[i]);
+      strcat(totalStr, "\n"); 
+    }
+  }
+  strcat(totalStr,"\0");
+
+  wclear(userlist);
+  mvwprintw(userlist, 0, 0, totalStr); // finally print total string
+  free(totalStr); // don't forget free
+  
+  wattroff(userlist,A_BOLD);
+  wattroff(userlist,COLOR_PAIR(1));
+  wrefresh(userlist);
+}
 
 int main(int argc, char*argv[]){
-  // mqueue has all messages from user
-  
-  int myKey;
+  int myKey;       
+  int currentUser; // for checking userlist refresh
   size_t shmid;
   pid_t server_pid;
   messageQueue* mqueue;
-  
   char *username;
+
+  // get name from argument or use account name
   if(argc>1 && strlen(argv[1])<MAX_USERNAME){
     username = (char *)malloc(sizeof(char) * strlen(argv[1]));
     strcpy(username, argv[1]);
   }else{
     username = getenv("USER");
   }
+
+  // create or get shared memory
   shmid = shmget(201424465, SHARED_MEMORY, IPC_EXCL| IPC_CREAT | 0777);
-  if(shmid == -1){ // shm already exists! 
+  if(shmid == -1){ // shared memory exists! 
     shmid = shmget(201424465, SHARED_MEMORY, 0777);
     mqueue =(messageQueue*) shmat(shmid,NULL,0);
-    mqueue->usercount++;
-    mqueue->userKey++;
   }
-  else{
+  else{ // if not, make shared memory, init, make server process
     mqueue = shmat(shmid,NULL,0);
     initQueue(mqueue);
     
     server_pid = fork();
     if(server_pid == 0){
-      //child == serve
+      //child == server
+      //check user, if 0 delete shared memory
       while(mqueue->usercount != 0);
       shmctl(shmid, IPC_RMID, NULL);
       exit(0);
     }
   }  
+  
+  // if room is full, exit
+  if(!adduser(mqueue,username)){
+    printf("the chat room is full!\n");
+    exit(1);
+  }
 
+  //add user to userlist
+  myKey = mqueue->usercount;
+  mqueue->usertable.using[myKey] == true;
+  strcpy(mqueue->usertable.name[myKey], username);
+  currentUser = mqueue->usercount++;
+  
+  //init ncurses
   initscr();
   noecho();
   cbreak();
@@ -193,8 +235,9 @@ int main(int argc, char*argv[]){
   wrefresh(output_border);
   wrefresh(userlist_border);
   wrefresh(input_border);
-  
-  printWindow(username, input,output,userlist);
+
+  printUser(userlist,&(mqueue->usertable));
+  printWindow(input,output);
 
   char inputline[MAX_MESSAGE_LENGTH] ="";
   int  index = 0;
@@ -208,6 +251,7 @@ int main(int argc, char*argv[]){
       // if queue is full dequeue the oldest one
       if (index <= 0) continue;
       if(strcmp(inputline, "./quit") == 0){
+	mqueue->usertable.using[myKey]=false;
 	mqueue->usercount--;
 	break;
       }
@@ -232,8 +276,12 @@ int main(int argc, char*argv[]){
       inputline[index+1] = '\0';
       index++;
     } 
-    printWindow(username, input,output,userlist);
-    wprintw(input,inputline);
+    // check userlist, update if needed
+    if(currentUser != mqueue->usercount){
+      printUser(userlist,&(mqueue->usertable));
+    }
+    printWindow(input,output);
+    wprintw(input,inputline);    
   }
   delwin(output);
   delwin(input);
