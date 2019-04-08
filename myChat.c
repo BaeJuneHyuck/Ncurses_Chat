@@ -2,8 +2,11 @@
 #include <unistd.h>
 #include <stdlib.h> // getenv, malloc, free
 #include <string.h> //strcpy, strncpy, strcat
-#include <pthread.h>
+#include <errno.h>
 #include <sys/shm.h>
+#include <sys/sem.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
 
 #define MAX_USER 10
 #define MAX_USERNAME 32
@@ -19,6 +22,28 @@ const int input_y = 6;
 const int userlist_x = 30;
 const int userlist_y = 24;
 
+union semun{
+  int val;
+  struct semid_ds *buf;
+  unsigned short int *array;
+}semopts;
+
+void p(int semid){
+  struct sembuf pbuf;
+  pbuf.sem_num = 0;
+  pbuf.sem_op = -1;
+  pbuf.sem_flg  = SEM_UNDO;
+  semop(semid, &pbuf, 1);
+}
+
+void v(int semid){
+  struct sembuf vbuf;
+  vbuf.sem_num = 0;
+  vbuf.sem_op = 1;
+  vbuf.sem_flg  = SEM_UNDO;
+  semop(semid, &vbuf, 1);
+}
+
 typedef struct userTable{
   char name[MAX_USER][MAX_USERNAME];
   bool using[MAX_USER];
@@ -33,6 +58,7 @@ typedef struct message{
 typedef struct messageQueue{ // circular queue
   int usercount; // number of user in chat room
   int userkey;   // unique number for each user, never decrease
+  bool roomActivated;
   userTable usertable;
   message list[MAX_MESSAGE];
   int size;
@@ -44,17 +70,24 @@ void initQueue (messageQueue* q){
   q->front = q->rear = -1;
   q->size = MAX_MESSAGE;
   q->usercount = 0;
-  
+  q->roomActivated = false;
   for(int i = 0 ;i<MAX_USER;i++){
     q->usertable.using[i] = false;
     strcpy(q->usertable.name[i], "");
   }
 }
 
-bool adduser(messageQueue* q, char*name){
+bool adduser(int semid, messageQueue* q, char*name){
   if(q->usercount > MAX_USER) return false;
+  //get in critical section
+ 
+//  p(semid);
+  q->usercount++;
+  q->roomActivated = true;
   q->usertable.using[q->usercount] = true;
   strcpy(q->usertable.name[q->usercount], name);
+//  v(semid);
+ 
   return true;
 }
 
@@ -163,6 +196,7 @@ int main(int argc, char*argv[]){
   int myKey;       
   int currentUser; // for checking userlist refresh
   size_t shmid;
+  int semid;
   pid_t server_pid;
   messageQueue* mqueue;
   char *username;
@@ -175,7 +209,8 @@ int main(int argc, char*argv[]){
     username = getenv("USER");
   }
 
-  // create or get shared memory
+  // create or get shared memory and semaphore
+  semid = semget(950426, 1,  IPC_CREAT | 0777);
   shmid = shmget(201424465, SHARED_MEMORY, IPC_EXCL| IPC_CREAT | 0777);
   if(shmid == -1){ // shared memory exists! 
     shmid = shmget(201424465, SHARED_MEMORY, 0777);
@@ -184,19 +219,29 @@ int main(int argc, char*argv[]){
   else{ // if not, make shared memory, init, make server process
     mqueue = shmat(shmid,NULL,0);
     initQueue(mqueue);
-    
+    printf("fork ready\n");
     server_pid = fork();
     if(server_pid == 0){
       //child == server
-      //check user, if 0 delete shared memory
-      while(mqueue->usercount != 0);
+      //check user, if 0 delete shared memory, and semaphore
+      while(!mqueue->roomActivated){
+        printf("waiting for room activated!\n");
+      }
+      while(1){
+        if(mqueue->usercount == 0){
+	  break;
+        }
+      }
+      semctl(semid, 0, IPC_RMID, 0);
       shmctl(shmid, IPC_RMID, NULL);
       exit(0);
     }
   }  
   
+  semopts.val = 1;
+
   // if room is full, exit
-  if(!adduser(mqueue,username)){
+  if(!adduser(semid, mqueue,username)){
     printf("the chat room is full!\n");
     exit(1);
   }
@@ -205,8 +250,7 @@ int main(int argc, char*argv[]){
   myKey = mqueue->usercount;
   mqueue->usertable.using[myKey] == true;
   strcpy(mqueue->usertable.name[myKey], username);
-  currentUser = mqueue->usercount++;
-  
+
   //init ncurses
   initscr();
   noecho();
@@ -238,7 +282,6 @@ int main(int argc, char*argv[]){
 
   printUser(userlist,&(mqueue->usertable));
   printWindow(input,output);
-
   char inputline[MAX_MESSAGE_LENGTH] ="";
   int  index = 0;
   char outputline[MAX_BUFFER] = "";
@@ -251,8 +294,12 @@ int main(int argc, char*argv[]){
       // if queue is full dequeue the oldest one
       if (index <= 0) continue;
       if(strcmp(inputline, "./quit") == 0){
+        // critical section : using semaphore
+        p(semid);
 	mqueue->usertable.using[myKey]=false;
 	mqueue->usercount--;
+        v(semid);
+        shmdt(mqueue);
 	break;
       }
       inputline[index++] = '\0';
