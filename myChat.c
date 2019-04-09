@@ -295,10 +295,10 @@ int main(int argc, char*argv[]){
       if (index <= 0) continue;
       if(strcmp(inputline, "./quit") == 0){
         // critical section : using semaphore
-        p(semid);
+        //p(semid);
 	mqueue->usertable.using[myKey]=false;
 	mqueue->usercount--;
-        v(semid);
+        //v(semid);
         shmdt(mqueue);
 	break;
       }
