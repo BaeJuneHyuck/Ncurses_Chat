@@ -22,7 +22,7 @@ const int input_x =  50;
 const int input_y = 6;
 const int userlist_x = 30;
 const int userlist_y = 24;
-const char *semname = "/mysem";
+const char *semname = "/mysema";
 
 typedef struct userTable{
   char name[MAX_USER][MAX_USERNAME];
@@ -65,6 +65,14 @@ bool adduser(sem_t *semaphore, messageQueue* q, char*name){
   q->roomActivated = true;
   q->usertable.using[q->usercount] = true;
   strcpy(q->usertable.name[q->usercount], name);
+  sem_post(semaphore);
+  return true;
+}
+
+bool removeUser(sem_t *semaphore, messageQueue *q, int uniqueKey){
+  sem_wait(semaphore);
+  q->usertable.using[uniqueKey]=false;
+  q->usercount--;
   sem_post(semaphore);
   return true;
 }
@@ -188,7 +196,11 @@ int main(int argc, char*argv[]){
   }
 
   // create or get shared memory and semaphore
-  semid = sem_open(semname, O_CREAT | O_EXCL, 0666,1);
+  if( (semid = sem_open(semname, O_CREAT | O_EXCL, 0777,1) ) == -1){
+    if(errno == EEXIST){
+      semid = sem_open(semname, 0777, 1);
+    }
+  }
   printf("%d sem_opend,%s\n",errno, strerror(errno));
  
   sleep(3);
@@ -275,12 +287,10 @@ int main(int argc, char*argv[]){
       // if queue is full dequeue the oldest one
       if (index <= 0) continue;
       if(strcmp(inputline, "./quit") == 0){
-        // critical section : using semaphore
-        //p(semid);
-	mqueue->usertable.using[myKey]=false;
-	mqueue->usercount--;
-        //v(semid);
-        shmdt(mqueue);
+        removeUser(semid,mqueue,myKey);
+	shmdt(mqueue);
+        sem_unlink(semname);
+        sem_close(semid);
 	break;
       }
       inputline[index++] = '\0';

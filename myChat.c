@@ -8,6 +8,7 @@
 #include <sys/types.h> //pid_t, sem_t 
 #include <sys/ipc.h>
 #include <semaphore.h>
+
 #define MAX_USER 10
 #define MAX_USERNAME 32
 #define MAX_BUFFER 2048
@@ -77,17 +78,24 @@ void initQueue (messageQueue* q){
   }
 }
 
-bool adduser(int semid, messageQueue* q, char*name){
+bool addUser(int semid, messageQueue* q, char*name){
   if(q->usercount > MAX_USER) return false;
   //get in critical section
  
-//  p(semid);
+  p(semid);
   q->usercount++;
   q->roomActivated = true;
   q->usertable.using[q->usercount] = true;
   strcpy(q->usertable.name[q->usercount], name);
-//  v(semid);
- 
+  v(semid); 
+  return true;
+}
+
+bool removeUser(int semid, messageQueue* q, int uniqueKey){
+  p(semid);
+  q->usertable.using[uniqueKey]=false;
+  q->usercount--;
+  v(semid);
   return true;
 }
 
@@ -200,6 +208,7 @@ int main(int argc, char*argv[]){
   pid_t server_pid;
   messageQueue* mqueue;
   char *username;
+  semopts.val = 1;
 
   // get name from argument or use account name
   if(argc>1 && strlen(argv[1])<MAX_USERNAME){
@@ -217,6 +226,7 @@ int main(int argc, char*argv[]){
     mqueue =(messageQueue*) shmat(shmid,NULL,0);
   }
   else{ // if not, make shared memory, init, make server process
+    semctl(semid, 0, SETVAL, semopts);
     mqueue = shmat(shmid,NULL,0);
     initQueue(mqueue);
     printf("fork ready\n");
@@ -232,16 +242,14 @@ int main(int argc, char*argv[]){
 	  break;
         }
       }
-      semctl(semid, 0, IPC_RMID, 0);
+      semctl(semid, 0, IPC_RMID, semopts);
       shmctl(shmid, IPC_RMID, NULL);
       exit(0);
     }
   }  
-  
-  semopts.val = 1;
 
   // if room is full, exit
-  if(!adduser(semid, mqueue,username)){
+  if(!addUser(semid, mqueue,username)){
     printf("the chat room is full!\n");
     exit(1);
   }
@@ -294,11 +302,7 @@ int main(int argc, char*argv[]){
       // if queue is full dequeue the oldest one
       if (index <= 0) continue;
       if(strcmp(inputline, "./quit") == 0){
-        // critical section : using semaphore
-        //p(semid);
-	mqueue->usertable.using[myKey]=false;
-	mqueue->usercount--;
-        //v(semid);
+        removeUser(semid,mqueue,myKey);
         shmdt(mqueue);
 	break;
       }
@@ -310,6 +314,11 @@ int main(int argc, char*argv[]){
       memset(inputline,'\0',MAX_MESSAGE_LENGTH);
       index = 0;
       wclear(input);
+     
+      // check userlist, update if needed
+      if(currentUser != mqueue->usercount){
+        printUser(userlist,&(mqueue->usertable));
+      }
     }else if(c == 127){
       // backspace, remove the last chracter from inputline
       if (index <= 0) continue;
@@ -323,10 +332,6 @@ int main(int argc, char*argv[]){
       inputline[index+1] = '\0';
       index++;
     } 
-    // check userlist, update if needed
-    if(currentUser != mqueue->usercount){
-      printUser(userlist,&(mqueue->usertable));
-    }
     printWindow(input,output);
     wprintw(input,inputline);    
   }
