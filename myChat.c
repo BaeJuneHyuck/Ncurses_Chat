@@ -2,12 +2,12 @@
 #include <unistd.h>
 #include <stdlib.h> // getenv, malloc, free
 #include <string.h> //strcpy, strncpy, strcat
-#include <errno.h>
+#include <errno.h> // errono
 #include <sys/shm.h>
 #include <sys/sem.h>
-#include <sys/types.h>
+#include <sys/types.h> //pid_t, sem_t 
 #include <sys/ipc.h>
-
+#include <semaphore.h>
 #define MAX_USER 10
 #define MAX_USERNAME 32
 #define MAX_BUFFER 2048
