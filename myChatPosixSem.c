@@ -3,6 +3,7 @@
 #include <stdlib.h> // getenv, malloc, free
 #include <string.h> //strcpy, strncpy, strcat
 #include <errno.h>
+#include <unistd.h> // access
 #include <semaphore.h>
 #include <sys/shm.h>
 #include <sys/types.h>
@@ -22,7 +23,7 @@ const int input_x =  50;
 const int input_y = 6;
 const int userlist_x = 30;
 const int userlist_y = 24;
-const char *semname = "/mysema";
+const char *semname = "mysem";
 
 typedef struct userTable{
   char name[MAX_USER][MAX_USERNAME];
@@ -196,20 +197,16 @@ int main(int argc, char*argv[]){
   }
 
   // create or get shared memory and semaphore
-  if( (semid = sem_open(semname, O_CREAT | O_EXCL, 0777,1) ) == -1){
-    if(errno == EEXIST){
-      semid = sem_open(semname, 0777, 1);
-    }
-  }
-  printf("%d sem_opend,%s\n",errno, strerror(errno));
- 
-  sleep(3);
   shmid = shmget(201424465, SHARED_MEMORY, IPC_EXCL| IPC_CREAT | 0777);
   if(shmid == -1){ // shared memory exists! 
     shmid = shmget(201424465, SHARED_MEMORY, 0777);
     mqueue =(messageQueue*) shmat(shmid,NULL,0);
+    semid = sem_open(semname, 0);
+  printf("%d semopen,%s\n",errno, strerror(errno));
   }
   else{ // if not, make shared memory, init, make server process
+    semid = sem_open(semname, O_CREAT | O_EXCL, 0777,1);
+  printf("%d sem created,%s\n",errno, strerror(errno));
     mqueue = shmat(shmid,NULL,0);
     initQueue(mqueue);
     printf("fork ready\n");
@@ -218,7 +215,7 @@ int main(int argc, char*argv[]){
       //child == server
       //check user, if 0 delete shared memory, and semaphore
       while(!mqueue->roomActivated){
-        printf("waiting for room activated!\n");
+        //printf("waiting for room activated!\n");
       }
       while(1){
         if(mqueue->usercount == 0){
@@ -232,7 +229,7 @@ int main(int argc, char*argv[]){
       exit(0);
     }
   }  
-  
+  sleep(3);
   // if room is full, exit
   if(!adduser(semid, mqueue,username)){
     printf("the chat room is full!\n");
