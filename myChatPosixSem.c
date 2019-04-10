@@ -3,7 +3,6 @@
 #include <stdlib.h> // getenv, malloc, free
 #include <string.h> //strcpy, strncpy, strcat
 #include <errno.h>
-#include <unistd.h> // access
 #include <semaphore.h>
 #include <sys/shm.h>
 #include <sys/types.h>
@@ -79,7 +78,8 @@ bool removeUser(sem_t *semaphore, messageQueue *q, int uniqueKey){
 }
 
 // add a message to message queue
-void enqueue(messageQueue* q, char* _from, char* _str, int length){
+void enqueue(sem_t *semaphore, messageQueue* q, char* _from, char* _str, int length){
+  sem_wait(semaphore);
   if((q->front == 0 && q->rear == q->size - 1) || 
 		  (q->rear == (q->front-1)%(q->size-1))){
     // queue is full, overwrite firt message
@@ -98,6 +98,7 @@ void enqueue(messageQueue* q, char* _from, char* _str, int length){
   temp->length = length;
   strcpy(temp->from,_from);
   strncpy(temp->str,_str,length);
+  sem_post(semaphore);
 }
 
 void makeMessage(char* totalStr, message* msg){
@@ -235,11 +236,7 @@ int main(int argc, char*argv[]){
     printf("the chat room is full!\n");
     exit(1);
   }
-
-  //add user to userlist
   myKey = mqueue->usercount;
-  mqueue->usertable.using[myKey] == true;
-  strcpy(mqueue->usertable.name[myKey], username);
 
   //init ncurses
   initscr();
@@ -291,7 +288,7 @@ int main(int argc, char*argv[]){
 	break;
       }
       inputline[index++] = '\0';
-      enqueue(mqueue,username,inputline,index);
+      enqueue(semid, mqueue,username,inputline,index);
       printMessages(output,mqueue); //update output screen
       
       //clear input line
