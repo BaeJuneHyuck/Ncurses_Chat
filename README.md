@@ -17,9 +17,4 @@
 
  "need to compile with -lpthread, -lrt in addition to -lncurses
 
-![Preview](https://github.com/BaeJuneHyuck/Ncurses_Chat/blob/master/snapshot/v2.1.png?raw=true)
-![Preview](https://github.com/BaeJuneHyuck/Ncurses_Chat/blob/master/snapshot/v2.2.png?raw=true)
-![Preview](https://github.com/BaeJuneHyuck/Ncurses_Chat/blob/master/snapshot/v2.3.png?raw=true)
-![Preview](https://github.com/BaeJuneHyuck/Ncurses_Chat/blob/master/snapshot/v2.4.png?raw=true)
-![Preview](https://github.com/BaeJuneHyuck/Ncurses_Chat/blob/master/snapshot/v2.5.png?raw=true)
 ![Preview](https://github.com/BaeJuneHyuck/Ncurses_Chat/blob/master/snapshot/v2.6.png?raw=true)
